@@ -62,6 +62,8 @@ def parse_args(args):
         help="number of matching samples to download")
     parser.add_argument("--ftp_retry", type=int, default=float("inf"), 
         help="number of times to retry sample downloads")
+     parser.add_argument("--overwrite", action="store_true",
+        help="overwrite already downloaded samples")
     parser.add_argument("out_dir",
         help="output directory to create and fill with per-region BAM files")
     
@@ -563,6 +565,12 @@ def downloadAllReads(job, options):
             
             # Where will this sample's BAM for this region go?
             bam_filename = "{}/{}.bam".format(sample_dir, sample_name)
+            
+            if os.path.exists(bam_filename) and not options.overwrite:
+                # Don't re-download stuff we already have.
+                RealTimeLogger.get().info("Skipping {} x {} which has already "
+                "been downloaded".format(region_name, sample_name))
+                continue
             
             RealTimeLogger.get().info("Making child for {} x {}: {}".format(
                 region_name, sample_name, sample_url))
