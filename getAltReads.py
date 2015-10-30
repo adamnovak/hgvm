@@ -62,7 +62,7 @@ def parse_args(args):
         help="number of matching samples to download")
     parser.add_argument("--ftp_retry", type=int, default=float("inf"), 
         help="number of times to retry sample downloads")
-     parser.add_argument("--overwrite", action="store_true",
+    parser.add_argument("--overwrite", action="store_true",
         help="overwrite already downloaded samples")
     parser.add_argument("out_dir",
         help="output directory to create and fill with per-region BAM files")
