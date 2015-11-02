@@ -474,6 +474,11 @@ def downloadAllReads(job, options):
     # TODO: We'll go through them in this order, so if you want a representative
     # subsampling, add some shuffle here or something.
 
+    # This holds URLs to data files (BAM/CRAM) with indexes that are on a
+    # sufficient number of contigs, by sample name. We take the first
+    # sufficiently good file for any sample.
+    sample_file_urls = {}
+
     for population_name in population_names:
     
         # For each of those, we need to get samples
@@ -484,11 +489,6 @@ def downloadAllReads(job, options):
         # Hopefully there aren't too many.
         sample_names = [n for n in ftp.nlst() if fnmatch.fnmatchcase(n,
             options.sample_pattern)]
-        
-        # This holds URLs to data files (BAM/CRAM) with indexes that are on a
-        # sufficient number of contigs, by sample name. We take the first
-        # sufficiently good file for any sample.
-        sample_file_urls = {}
         
         # TODO: handle failures during explore_path?
         for sample_name in sample_names:
@@ -505,29 +505,43 @@ def downloadAllReads(job, options):
                 
                 print(index_name)
                 
-                # Count up the contigs it indexes over
-                indexed_contigs = count_indexed_contigs("{}/{}".format(
-                    base_url, index_name), options.ftp_retry)
-                    
-                if indexed_contigs >= options.min_indexed_contigs:
-                    # This file for this sample is good enough
+                if options.min_indexed_contigs > 0:
+                    # We need to run the check on the index before downloading
+                    # the sample reads.
+                
+                    # Count up the contigs it indexes over
+                    indexed_contigs = count_indexed_contigs("{}/{}".format(
+                        base_url, index_name), options.ftp_retry)
+                        
+                    if indexed_contigs >= options.min_indexed_contigs:
+                        # This file for this sample is good enough
+                        sample_file_urls[sample_name] = "{}/{}".format(base_url,
+                            data_name)
+                        
+                        RealTimeLogger.get().info(
+                            "Sample {} has index of {} contigs".format(
+                            sample_name, indexed_contigs))
+                        # Add the sample to the file we spit out
+                        good_samples.write("{}\n".format(sample_name))
+                        
+                        # Don't finish exploring the path
+                        break
+                        
+                    else:
+                        # Complain
+                        RealTimeLogger.get().warning(
+                            "Sample {} has index on too few contigs ({})."
+                            "Skipping!".format(sample_name, indexed_contigs))
+                            
+                else:
+                    # We don't need to check the number of indexed contigs.
+                    RealTimeLogger.get().info("Sample {} doesn't need an "
+                        "indexed contigs check".format(sample_name))
+                    # Still use this one. TODO: unify code with above.
                     sample_file_urls[sample_name] = "{}/{}".format(base_url,
-                        data_name)
-                    
-                    RealTimeLogger.get().info(
-                        "Sample {} has index of {} contigs".format(sample_name,
-                        indexed_contigs))
+                            data_name)
                     # Add the sample to the file we spit out
                     good_samples.write("{}\n".format(sample_name))
-                    
-                    # Don't finish exploring the path
-                    break
-                    
-                else:
-                    # Complain
-                    RealTimeLogger.get().warning(
-                        "Sample {} has index on too few contigs ({})."
-                        "Skipping!".format(sample_name, indexed_contigs))
                     
             if len(sample_file_urls) >= options.sample_limit:
                 # We got enough. Don't finish this population
@@ -708,7 +722,8 @@ def concatAndSortBams(job, options, bam_ids, output_filename):
         RealTimeLogger.get().info("Skip concatenation...")
         
         # Just grab the file for the one BAM
-        job.fileStore.readGlobalFile(bam_ids[0], concat_filename)
+        stored_filename = job.fileStore.readGlobalFile(bam_ids[0])
+        shutil.copy2(stored_filename,  concat_filename)
     else:
         raise RuntimeError("Got no BAM parts!")
     
